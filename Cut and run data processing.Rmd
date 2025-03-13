@@ -1,0 +1,171 @@
+---
+title: "Mapping Cut&Run Peaks DEGs"
+output: html_notebook
+---
+
+```{r}
+# Load required libraries
+library(GenomicRanges)
+library(GenomicFeatures)
+library(rtracklayer)
+library(dplyr)
+library(readr)
+```
+```{r}
+# Function to extract promoter regions from a GTF file, considering both strands
+extract_promoters_from_gtf <- function(gtf_file, upstream = 2000, downstream = 500) {
+  
+  # Import GTF file
+  gtf_data <- import(gtf_file)
+  
+  # Filter for gene entries
+  genes <- gtf_data[gtf_data$type == "gene"]
+  
+  # Extract gene names
+  gene_names <- mcols(genes)$gene_name
+  
+  # Define promoters as a GRanges object
+  promoters <- GRanges(
+    seqnames = seqnames(genes),
+    strand = strand(genes),
+    ranges = IRanges(
+      start = ifelse(strand(genes) == "+", 
+                     pmax(start(genes) - upstream, 1),  
+                     # Positive strand: upstream of start
+                     end(genes) - downstream),         
+      # Negative strand: upstream of end
+      end = ifelse(strand(genes) == "+", 
+                   start(genes) + downstream,         
+                   # Positive strand: downstream of start
+                   pmax(end(genes) + upstream, 1))   
+      # Negative strand: upstream of end
+    )
+  )
+  
+  # Add gene names to promoter metadata
+  mcols(promoters)$name <- gene_names
+  
+  return(promoters)
+}
+
+# Function to find overlaps between promoters and peaks
+find_promoter_overlaps <- function(promoters, peaks_file, output_file) {
+  
+  # Load peaks from BED file
+  peaks <- import(peaks_file, format = "BED") 
+  
+  # Find overlaps between promoters and peaks
+  overlaps <- findOverlaps(promoters, peaks)
+  
+  # Extract gene names for overlapping regions
+  overlapping_genes <- unique(mcols(promoters)$name[queryHits(overlaps)])
+
+  # Save results if overlaps are found
+  if (length(overlapping_genes) > 0) {
+    overlapping_df <- tibble(Gene = overlapping_genes)
+    write_csv(overlapping_df, output_file)
+    print(paste("Overlapping genes saved to:", output_file))
+    return(overlapping_df)
+  } else {
+    print("No overlaps found.")
+    return(NULL)
+  }
+}
+```
+
+```{r}
+
+# Define your annotated genome, peaks, and output file names
+gtf_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/gencode.vM36.annotation.gtf"
+peaks_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/Zoghbi_CICWT_liftOver_peaks.bed.txt"
+output_file <- "genes_with_peaks.csv"
+
+# Extract promoters from GTF
+promoters <- extract_promoters_from_gtf(gtf_file)
+
+# Find overlapping genes
+overlapping_genes <- find_promoter_overlaps(promoters, peaks_file, output_file)
+
+# Print first few overlapping genes
+print(head(overlapping_genes))
+
+```
+
+
+```{r}
+library(tidyverse)
+
+# Function to compare peak list with upregulated genes (case-insensitive)
+compare_gene_lists <- function(peaks_file, upregulated_file) {
+  
+  # Read peak gene list (CSV file output by overlapping_genes function)
+  peak_genes <- read_csv(peaks_file) %>% 
+    mutate(Gene = str_to_lower(str_trim(Gene)))  # Convert to lowercase & trim spaces
+
+  # Read upregulated genes (CSV file with a column "Gene")
+  upregulated_genes <- read_csv(upregulated_file) %>% 
+    mutate(Gene = str_to_lower(str_trim(Gene)))  # Convert to lowercase & trim spaces
+
+  # Find matching genes (case-insensitive)
+  matching_genes <- inner_join(peak_genes, upregulated_genes, by = c("Gene" = "Gene"))
+
+  # Save output if matches exist
+  if (nrow(matching_genes) > 0) {
+    write_csv(matching_genes, output_file)
+    print("Matching genes saved to output_file")
+  } else {
+    print("No matching genes found.")
+  }
+  
+  return(matching_genes)
+}
+```
+
+```{r}
+# Example usage:
+peaks_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/genes_with_peaks.csv"
+upregulated_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/CIC_KO_derepressed_genes.csv"
+output_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/all_matching_CIC_KO_derepressed_genes.csv"
+
+matching_genes <- compare_gene_lists(peaks_file, upregulated_file)
+
+# Print first few matches
+print(head(matching_genes))
+
+```
+
+
+```{r}
+peaks_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/genes_with_peaks.csv"
+upregulated_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/CIC_KO_2x_derepressed_genes.csv"
+output_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/matching_CIC_KO_2x_derepressed_genes.csv"
+
+matching_genes <- compare_gene_lists(peaks_file, upregulated_file)
+
+# Print first few matches
+print(head(matching_genes))
+
+```
+
+```{r}
+peaks_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/genes_with_peaks.csv"
+upregulated_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/CIC_KO_1.5x_derepressed_genes.csv"
+output_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/matching_CIC_KO_1.5x_derepressed_genes.csv"
+
+matching_genes <- compare_gene_lists(peaks_file, upregulated_file)
+
+# Print first few matches
+print(head(matching_genes))
+```
+
+```{r}
+peaks_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/genes_with_peaks.csv"
+upregulated_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/CIC_KO_0.7x_repressed_genes.csv"
+output_file <- "C:/Users/Mia Chung/Documents/Haggarty Lab/matching_CIC_KO_0.7x_repressed_genes.csv"
+
+matching_genes <- compare_gene_lists(peaks_file, upregulated_file)
+
+# Print first few matches
+print(head(matching_genes))
+```
+
